@@ -3,6 +3,7 @@ package mobi.sevenwinds.app.budget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.sum
 import org.jetbrains.exposed.sql.transactions.transaction
 
 object BudgetService {
@@ -25,10 +26,18 @@ object BudgetService {
                 .select { BudgetTable.year eq param.year }
                 .limit(param.limit, param.offset)
 
-            val total = query.count()
+            val total = BudgetTable
+                .select { BudgetTable.year eq param.year }
+                .count()
+
+
             val data = BudgetEntity.wrapRows(query).map { it.toResponse() }
 
-            val sumByType = data.groupBy { it.type.name }.mapValues { it.value.sumOf { v -> v.amount } }
+            val sumByType = BudgetTable
+                .slice(BudgetTable.type, BudgetTable.amount.sum())
+                .select { BudgetTable.year eq param.year }
+                .groupBy(BudgetTable.type)
+                .associate { it[BudgetTable.type].name to it[BudgetTable.amount.sum()]!! }
 
             return@transaction BudgetYearStatsResponse(
                 total = total,
